@@ -22,6 +22,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/go-logr/stdr"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -56,7 +57,7 @@ func (s *HandlerTestSuite) SetupSuite() {
 	s.errCatcher = new(testErrCatcher)
 	s.origHandler = GlobalErrorHandler.getDelegate()
 
-	GlobalErrorHandler.setDelegate(&ErrLogger{l: log.New(s.errCatcher, "", 0)})
+	GlobalErrorHandler.setDelegate(&ErrLogger{l: stdr.New(log.New(s.errCatcher, "", 0))})
 }
 
 func (s *HandlerTestSuite) TearDownSuite() {
@@ -68,25 +69,27 @@ func (s *HandlerTestSuite) SetupTest() {
 }
 
 func (s *HandlerTestSuite) TearDownTest() {
-	GlobalErrorHandler.setDelegate(&ErrLogger{l: log.New(s.errCatcher, "", 0)})
+	GlobalErrorHandler.setDelegate(&ErrLogger{l: stdr.New(log.New(s.errCatcher, "", 0))})
 }
 
 func (s *HandlerTestSuite) TestGlobalHandler() {
 	errs := []string{"one", "two"}
 	GetErrorHandler().Handle(errors.New(errs[0]))
 	Handle(errors.New(errs[1]))
-	s.Assert().Equal(errs, s.errCatcher.Got())
+	expectedErrLogs := []string{`"msg"="one" "error"="one"`, `"msg"="two" "error"="two"`}
+	s.Assert().Equal(expectedErrLogs, s.errCatcher.Got())
 }
 
 func (s *HandlerTestSuite) TestDelegatedHandler() {
 	eh := GetErrorHandler()
 
 	newErrLogger := new(testErrCatcher)
-	SetErrorHandler(&ErrLogger{l: log.New(newErrLogger, "", 0)})
+	SetErrorHandler(&ErrLogger{l: stdr.New(log.New(newErrLogger, "", 0))})
 
 	errs := []string{"TestDelegatedHandler"}
 	eh.Handle(errors.New(errs[0]))
-	s.Assert().Equal(errs, newErrLogger.Got())
+	expectedErrLogs := []string{`"msg"="TestDelegatedHandler" "error"="TestDelegatedHandler"`}
+	s.Assert().Equal(expectedErrLogs, newErrLogger.Got())
 }
 
 func (s *HandlerTestSuite) TestNoDropsOnDelegate() {
@@ -96,7 +99,7 @@ func (s *HandlerTestSuite) TestNoDropsOnDelegate() {
 	// Change to another Handler. We are testing this is loss-less.
 	newErrLogger := new(testErrCatcher)
 	secondary := &ErrLogger{
-		l: log.New(newErrLogger, "", 0),
+		l: stdr.New(log.New(newErrLogger, "", 0)),
 	}
 	SetErrorHandler(secondary)
 
@@ -108,12 +111,12 @@ func (s *HandlerTestSuite) TestNoDropsOnDelegate() {
 func (s *HandlerTestSuite) TestAllowMultipleSets() {
 	notUsed := new(testErrCatcher)
 
-	secondary := &ErrLogger{l: log.New(notUsed, "", 0)}
+	secondary := &ErrLogger{l: stdr.New(log.New(notUsed, "", 0))}
 	SetErrorHandler(secondary)
 	s.Require().Same(GetErrorHandler(), GlobalErrorHandler, "set changed globalErrorHandler")
 	s.Require().Same(GlobalErrorHandler.getDelegate(), secondary, "new Handler not set")
 
-	tertiary := &ErrLogger{l: log.New(notUsed, "", 0)}
+	tertiary := &ErrLogger{l: stdr.New(log.New(notUsed, "", 0))}
 	SetErrorHandler(tertiary)
 	s.Require().Same(GetErrorHandler(), GlobalErrorHandler, "set changed globalErrorHandler")
 	s.Assert().Same(GlobalErrorHandler.getDelegate(), tertiary, "user Handler not overridden")
@@ -125,13 +128,13 @@ func TestHandlerTestSuite(t *testing.T) {
 
 func TestHandlerConcurrentSafe(t *testing.T) {
 	// In order not to pollute the test output.
-	SetErrorHandler(&ErrLogger{log.New(io.Discard, "", 0)})
+	SetErrorHandler(&ErrLogger{stdr.New(log.New(io.Discard, "", 0))})
 
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		SetErrorHandler(&ErrLogger{log.New(io.Discard, "", 0)})
+		SetErrorHandler(&ErrLogger{stdr.New(log.New(io.Discard, "", 0))})
 	}()
 	wg.Add(1)
 	go func() {
@@ -144,9 +147,9 @@ func TestHandlerConcurrentSafe(t *testing.T) {
 }
 
 func BenchmarkErrorHandler(b *testing.B) {
-	primary := &ErrLogger{l: log.New(io.Discard, "", 0)}
-	secondary := &ErrLogger{l: log.New(io.Discard, "", 0)}
-	tertiary := &ErrLogger{l: log.New(io.Discard, "", 0)}
+	primary := &ErrLogger{l: stdr.New(log.New(io.Discard, "", 0))}
+	secondary := &ErrLogger{l: stdr.New(log.New(io.Discard, "", 0))}
+	tertiary := &ErrLogger{l: stdr.New(log.New(io.Discard, "", 0))}
 
 	GlobalErrorHandler.setDelegate(primary)
 
@@ -182,7 +185,7 @@ func BenchmarkGetDefaultErrorHandler(b *testing.B) {
 }
 
 func BenchmarkGetDelegatedErrorHandler(b *testing.B) {
-	SetErrorHandler(&ErrLogger{l: log.New(io.Discard, "", 0)})
+	SetErrorHandler(&ErrLogger{l: stdr.New(log.New(io.Discard, "", 0))})
 
 	b.ReportAllocs()
 	b.ResetTimer()
@@ -195,7 +198,7 @@ func BenchmarkGetDelegatedErrorHandler(b *testing.B) {
 
 func BenchmarkDefaultErrorHandlerHandle(b *testing.B) {
 	GlobalErrorHandler.setDelegate(
-		&ErrLogger{l: log.New(io.Discard, "", 0)},
+		&ErrLogger{l: stdr.New(log.New(io.Discard, "", 0))},
 	)
 
 	eh := GetErrorHandler()
@@ -212,7 +215,7 @@ func BenchmarkDefaultErrorHandlerHandle(b *testing.B) {
 
 func BenchmarkDelegatedErrorHandlerHandle(b *testing.B) {
 	eh := GetErrorHandler()
-	SetErrorHandler(&ErrLogger{l: log.New(io.Discard, "", 0)})
+	SetErrorHandler(&ErrLogger{l: stdr.New(log.New(io.Discard, "", 0))})
 	err := errors.New("benchmark delegated error handler handle")
 
 	b.ReportAllocs()
@@ -225,7 +228,7 @@ func BenchmarkDelegatedErrorHandlerHandle(b *testing.B) {
 }
 
 func BenchmarkSetErrorHandlerDelegation(b *testing.B) {
-	alt := &ErrLogger{l: log.New(io.Discard, "", 0)}
+	alt := &ErrLogger{l: stdr.New(log.New(io.Discard, "", 0))}
 
 	b.ReportAllocs()
 	b.ResetTimer()

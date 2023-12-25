@@ -29,10 +29,6 @@ import (
 // interface. This logger will only show messages at the Error Level.
 var globalLogger atomic.Pointer[logr.Logger]
 
-func init() {
-	SetLogger(stdr.New(log.New(os.Stderr, "", log.LstdFlags|log.Lshortfile)))
-}
-
 // SetLogger overrides the globalLogger with l.
 //
 // To see Warn messages use a logger with `l.V(1).Enabled() == true`
@@ -43,7 +39,14 @@ func SetLogger(l logr.Logger) {
 }
 
 func getLogger() logr.Logger {
-	return *globalLogger.Load()
+	l := globalLogger.Load()
+	if l != nil {
+		return *l
+	}
+
+	defaultLogger := stdr.New(log.New(os.Stderr, "", log.LstdFlags|log.Lshortfile))
+	SetLogger(defaultLogger)
+	return defaultLogger
 }
 
 // Info prints messages about the general state of the API or SDK.

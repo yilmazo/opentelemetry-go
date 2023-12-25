@@ -15,9 +15,9 @@
 package global // import "go.opentelemetry.io/otel/internal/global"
 
 import (
-	"log"
-	"os"
 	"sync/atomic"
+
+	"github.com/go-logr/logr"
 )
 
 var (
@@ -59,18 +59,18 @@ func (d *ErrDelegator) setDelegate(eh ErrorHandler) {
 
 func defaultErrorHandler() *ErrDelegator {
 	d := &ErrDelegator{}
-	d.setDelegate(&ErrLogger{l: log.New(os.Stderr, "", log.LstdFlags)})
+	d.setDelegate(&ErrLogger{l: getLogger()})
 	return d
 }
 
 // ErrLogger logs errors if no delegate is set, otherwise they are delegated.
 type ErrLogger struct {
-	l *log.Logger
+	l logr.Logger
 }
 
 // Handle logs err if no delegate is set, otherwise it is delegated.
 func (h *ErrLogger) Handle(err error) {
-	h.l.Print(err)
+	h.l.Error(err, err.Error())
 }
 
 // GetErrorHandler returns the global ErrorHandler instance.
